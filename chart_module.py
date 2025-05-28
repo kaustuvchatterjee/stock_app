@@ -467,7 +467,8 @@ class ChartModule:
         fig = go.Figure()
         
         # Add pie chart for holdings allocation
-        labels = holdings_data['ticker'].tolist()
+        # Use 'ticker_name' for labels if available, otherwise fallback to 'ticker'
+        labels = holdings_data['ticker_name'].tolist() if 'ticker_name' in holdings_data.columns else holdings_data['ticker'].tolist()
         values = (holdings_data['quantity'] * holdings_data['current_price']).tolist()
         
         fig.add_trace(go.Pie(
@@ -506,3 +507,4 @@ class ChartModule:
         
         # Convert to JSON for embedding in QWebEngineView
         return json.loads(fig.to_json())
+

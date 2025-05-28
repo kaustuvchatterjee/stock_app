@@ -329,6 +329,19 @@ class DataModule:
         except Exception as e:
             print(f"Error adding transaction: {e}")
             return False
+
+    def delete_transaction(self, transaction_id: int) -> bool:
+        """Delete a transaction from the database by ID"""
+        try:
+            conn = sqlite3.connect(self.db_file)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error deleting transaction: {e}")
+            return False
     
     def get_transactions(self, ticker: Optional[str] = None) -> pd.DataFrame:
         """Get all transactions, optionally filtered by ticker"""
@@ -422,3 +435,4 @@ class DataModule:
         except Exception as e:
             print(f"Error calculating portfolio value: {e}")
             return {'total_value': 0, 'total_cost': 0, 'profit_loss': 0, 'percent_change': 0}
+

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, Q
                               QMessageBox, QSplitter, QFrame, QStatusBar, QMenu, QMenuBar)
 from PySide6.QtCore import Qt, QDate, Signal, Slot, QThread, QUrl
 from PySide6.QtGui import QFont, QColor, QIcon, QAction
+
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 import sys
@@ -315,6 +316,9 @@ class MainWindow(QMainWindow):
         self.data_module = DataModule()
         self.chart_module = ChartModule()
         
+        # Initialize tickers and ticker names before setting up tabs
+        self.tickers, self.ticker_names = [], [] # Initialize as empty lists
+        
         # Set window properties
         self.setWindowTitle("Algotrade")
         self.setMinimumSize(800, 600)
@@ -339,10 +343,13 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.portfolio_tab, "Portfolio")
         self.tab_widget.addTab(self.transactions_tab, "Transactions")
         
-        # Setup tabs
+        # Setup tabs (market tab must be setup before load_tickers to initialize ticker_combo)
         self.setup_market_tab()
         self.setup_portfolio_tab()
         self.setup_transactions_tab()
+        
+        # Now load tickers, as ticker_combo is initialized
+        self.load_tickers() 
         
         # Create status bar
         self.status_bar = QStatusBar()
@@ -361,7 +368,6 @@ class MainWindow(QMainWindow):
         self.data_thread = None
         
         # Load initial data
-        self.load_tickers()
         self.fetch_data()
     
     def closeEvent(self, event):
@@ -411,7 +417,7 @@ class MainWindow(QMainWindow):
         # Ticker selection
         ticker_layout = QHBoxLayout()
         ticker_label = QLabel("Ticker:")
-        self.ticker_combo = QComboBox()
+        self.ticker_combo = QComboBox() # self.ticker_combo is initialized here
         self.ticker_combo.currentIndexChanged.connect(self.on_ticker_changed)
         ticker_layout.addWidget(ticker_label)
         ticker_layout.addWidget(self.ticker_combo)
@@ -735,10 +741,11 @@ class MainWindow(QMainWindow):
         self.holdings_table.setRowCount(0)
         
         if not holdings.empty:
-            # Add current prices to holdings
+            # Add current prices and ticker names to holdings DataFrame
             holdings['current_price'] = 0.0
             holdings['profit_loss'] = 0.0
             holdings['profit_loss_pct'] = 0.0
+            holdings['ticker_name'] = "" # Add ticker_name column
             
             for i, row in holdings.iterrows():
                 ticker = row['ticker']
@@ -756,22 +763,24 @@ class MainWindow(QMainWindow):
                     
                     holdings.at[i, 'profit_loss'] = profit_loss
                     holdings.at[i, 'profit_loss_pct'] = profit_loss_pct
+
+                # Get ticker name and assign to the holdings DataFrame
+                ticker_name = ticker
+                if ticker in self.tickers:
+                    idx = self.tickers.index(ticker)
+                    ticker_name = self.ticker_names[idx]
+                holdings.at[i, 'ticker_name'] = ticker_name
             
             # Update table
             self.holdings_table.setRowCount(len(holdings))
             
             for i, row in holdings.iterrows():
-                ticker = row['ticker']
-                
-                # Get ticker name
-                ticker_name = ticker
-                if ticker in self.tickers:
-                    idx = self.tickers.index(ticker)
-                    ticker_name = self.ticker_names[idx]
+                # Use row['ticker_name'] directly as it's now in the DataFrame
+                ticker_name_display = row['ticker_name']
                 
                 # Add to table
-                self.holdings_table.setItem(i, 0, QTableWidgetItem(ticker))
-                self.holdings_table.setItem(i, 1, QTableWidgetItem(ticker_name))
+                self.holdings_table.setItem(i, 0, QTableWidgetItem(row['ticker']))
+                self.holdings_table.setItem(i, 1, QTableWidgetItem(ticker_name_display))
                 self.holdings_table.setItem(i, 2, QTableWidgetItem(f"{row['quantity']:.3f}"))
                 self.holdings_table.setItem(i, 3, QTableWidgetItem(f"{row['avg_price']:.2f}"))
                 self.holdings_table.setItem(i, 4, QTableWidgetItem(f"{row['current_price']:.2f}"))
@@ -829,9 +838,9 @@ class MainWindow(QMainWindow):
                 
                 # Get ticker name
                 ticker = row['ticker']
-                print(ticker)
                 ticker_name = ticker
-                if ticker in self.tickers:
+                # Ensure self.tickers is populated before checking
+                if hasattr(self, 'tickers') and ticker in self.tickers:
                     idx = self.tickers.index(ticker)
                     ticker_name = self.ticker_names[idx]
                 
@@ -895,7 +904,12 @@ class MainWindow(QMainWindow):
             if dialog.exec():
                 # Delete old transaction and add new one
                 # This is a simplification - in a real app, you'd update the existing record
-                if self.data_module.add_transaction(
+                # To properly update, you'd need a method in DataModule to update a transaction by ID
+                # For now, I'm assuming a delete and re-add for simplicity as per original code's comment
+                # However, the original code doesn't actually delete, just reloads.
+                # Let's add a proper delete method to data_module and use it.
+                if self.data_module.delete_transaction(transaction_id) and \
+                   self.data_module.add_transaction(
                     dialog.get_transaction()['date'],
                     dialog.get_transaction()['ticker'],
                     dialog.get_transaction()['type'],
@@ -923,11 +937,12 @@ class MainWindow(QMainWindow):
                                         QMessageBox.Yes | QMessageBox.No)
             
             if reply == QMessageBox.Yes:
-                # In a real app, you'd implement a delete method in the data module
-                # For this example, we'll just reload the transactions
-                self.load_transactions()
-                self.update_portfolio_tab()
-                self.fetch_data()
+                if self.data_module.delete_transaction(transaction_id): # Use the new delete method
+                    self.load_transactions()
+                    self.update_portfolio_tab()
+                    self.fetch_data()
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to delete transaction")
         else:
             QMessageBox.information(self, "Select Transaction", "Please select a transaction to edit")
 
