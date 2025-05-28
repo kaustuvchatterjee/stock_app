@@ -15,7 +15,7 @@ class ChartModule:
     def __init__(self):
         """Initialize the chart module"""
         self.default_layout = {
-            "height": 600,
+            "height": 400,
             "showlegend": False,
             "xaxis": {"rangeslider": {"visible": False}},
             "margin": {"l": 50, "r": 50, "t": 50, "b": 50},
@@ -332,7 +332,7 @@ class ChartModule:
         layout = {
             "autosize": True,
             # "width": 600,
-            # "height": 400,
+            "height": 600,
             "showlegend": False,
             "xaxis": {"rangeslider": {"visible": False}, "showgrid": False},
             "yaxis": {"showgrid": False},
