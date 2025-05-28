@@ -336,7 +336,7 @@ class ChartModule:
             "showlegend": False,
             "xaxis": {"rangeslider": {"visible": False}, "showgrid": False},
             "yaxis": {"showgrid": False},
-            "yaxis2": {"range": [0, 100], "showgrid": False},
+            "yaxis2": {"range": [0, 100], "showticklabels": False, "showgrid": False},
             "yaxis3": {"range": macd_range, "showticklabels": False, "showgrid": False},
             "plot_bgcolor": "white",
             "paper_bgcolor": "white",
