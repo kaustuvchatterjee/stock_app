@@ -702,7 +702,8 @@ class MainWindow(QMainWindow):
         self.historical_web_view.setHtml(historical_html)
         
         # Update current chart
-        current_fig = self.chart_module.create_current_figure(live_data, portfolio_holdings)
+        prev_close = data.iloc[-2]['Close']
+        current_fig = self.chart_module.create_current_figure(live_data, prev_close, portfolio_holdings)
         current_html = self.create_plotly_html(current_fig)
         self.current_web_view.setHtml(current_html)
         

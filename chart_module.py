@@ -346,7 +346,8 @@ class ChartModule:
         # Convert to JSON for embedding in QWebEngineView
         return json.loads(fig.to_json())
     
-    def create_current_figure(self, live_data: pd.DataFrame, 
+    def create_current_figure(self, live_data: pd.DataFrame,
+                              prev_close: Optional[float], 
                              portfolio_holdings: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """
         Create current day chart with volume
@@ -395,6 +396,11 @@ class ChartModule:
         
         fig.add_trace(today_plot, secondary_y=False)
         fig.add_trace(vol_plot, secondary_y=True)
+        fig.add_hline(
+            y = prev_close,
+            line_color='black',
+            line_width=0.5,
+        )
         
         # Add portfolio holdings visualization if provided
         if portfolio_holdings and 'avg_price' in portfolio_holdings and 'quantity' in portfolio_holdings:
