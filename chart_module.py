@@ -363,7 +363,7 @@ class ChartModule:
             fig = go.Figure()
             fig.update_layout(title="No current day data available")
             return json.loads(fig.to_json())
-        
+
         # Ensure data is properly formatted
         live_data_copy = live_data.copy()
         
