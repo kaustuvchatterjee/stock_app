@@ -9,5 +9,6 @@ dependencies = [
     "pandas>=2.2.3",
     "plotly>=6.1.1",
     "pyside6>=6.9.0",
+    "scipy>=1.15.3",
     "yfinance>=0.2.61",
 ]

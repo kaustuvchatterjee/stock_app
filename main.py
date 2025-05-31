@@ -295,8 +295,8 @@ class TickerManagementDialog(QDialog):
             ticker = self.table.item(row, 0).text()
 
             reply = QMessageBox.question(self, "Confirm Delete",
-                                        f"Are you sure you want to delete ticker {ticker}?",
-                                        QMessageBox.Yes | QMessageBox.No)
+                                         f"Are you sure you want to delete ticker {ticker}?",
+                                         QMessageBox.Yes | QMessageBox.No)
 
             if reply == QMessageBox.Yes:
                 if self.data_module.remove_ticker(ticker):
@@ -312,12 +312,20 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # Initialize data_thread early
+        self.data_thread = None
+
         # Initialize modules
         self.data_module = DataModule()
         self.chart_module = ChartModule()
 
-        # Initialize tickers and ticker names before setting up tabs
+        # Initialize core data variables BEFORE setting up tabs
         self.tickers, self.ticker_names = [], [] # Initialize as empty lists
+        self.current_ticker_idx = 0
+        self.current_duration = 180
+        self.historical_data = pd.DataFrame()
+        self.live_data = pd.DataFrame()
+        self.last_updated = "N/A"
 
         # Set window properties
         self.setWindowTitle("Algotrade")
@@ -329,6 +337,10 @@ class MainWindow(QMainWindow):
 
         # Create main layout
         self.main_layout = QVBoxLayout(self.central_widget)
+
+        # Create status bar FIRST to ensure it's initialized before any potential calls
+        # to fetch_data() that might originate from setting up other widgets.
+        self.statusBar().showMessage("Ready")
 
         # Create tab widget
         self.tab_widget = QTabWidget()
@@ -348,24 +360,12 @@ class MainWindow(QMainWindow):
         self.setup_portfolio_tab()
         self.setup_transactions_tab()
 
-        # Now load tickers, as ticker_combo is initialized
+        # Now load tickers, as ticker_combo is initialized. This might trigger on_ticker_changed,
+        # but now self.statusBar is guaranteed to exist.
         self.load_tickers()
-
-        # Create status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
 
         # Create menu bar
         self.setup_menu_bar()
-
-        # Initialize data
-        self.current_ticker_idx = 0
-        self.current_duration = 180
-        self.historical_data = pd.DataFrame()
-        self.live_data = pd.DataFrame()
-        self.last_updated = "N/A"
-        self.data_thread = None
 
         # Auto-refresh timer
         self.refresh_interval_minutes = 5 # Default refresh interval
@@ -446,7 +446,7 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             self.refresh_interval_minutes = interval_spin.value()
             self.start_auto_refresh()
-            self.status_bar.showMessage(f"Auto-refresh set to {self.refresh_interval_minutes} minutes")
+            self.statusBar().showMessage(f"Auto-refresh set to {self.refresh_interval_minutes} minutes")
 
     def start_auto_refresh(self):
         """Starts or restarts the auto-refresh timer"""
@@ -675,9 +675,20 @@ class MainWindow(QMainWindow):
     def fetch_data(self):
         """Fetch data for current ticker"""
         if not self.tickers:
+            self.statusBar().showMessage("No tickers available to fetch data.")
+            self.refresh_button.setEnabled(True)
             return
 
-        self.status_bar.showMessage(f"Fetching data for {self.ticker_names[self.current_ticker_idx]}...")
+        # Ensure current_ticker_idx is valid
+        if not (0 <= self.current_ticker_idx < len(self.tickers)):
+            self.statusBar().showMessage("Invalid ticker selection. Please select a valid ticker.")
+            self.refresh_button.setEnabled(True)
+            return
+
+        ticker_symbol = self.tickers[self.current_ticker_idx]
+        # print(f"DEBUG: fetch_data: Preparing to fetch data for ticker: '{ticker_symbol}' (type: {type(ticker_symbol)})")
+
+        self.statusBar().showMessage(f"Fetching data for {self.ticker_names[self.current_ticker_idx]}...")
         self.refresh_button.setEnabled(False)
 
         # Stop any existing thread
@@ -687,7 +698,7 @@ class MainWindow(QMainWindow):
         # Start background thread for data fetching
         self.data_thread = StockDataThread(
             self.data_module,
-            self.tickers[self.current_ticker_idx],
+            ticker_symbol, # Pass the explicitly retrieved ticker
             self.current_duration
         )
         self.data_thread.data_ready.connect(self.on_data_ready)
@@ -703,32 +714,48 @@ class MainWindow(QMainWindow):
             self.last_updated = last_updated
 
             # Calculate percentage change
-            pchange = 100 * (data.iloc[-1]['Close'] - data.iloc[-2]['Close']) / data.iloc[-2]['Close']
+            # Ensure there are enough data points before calculating pchange
+            if len(data) >= 2 and 'Close' in data.columns and not data['Close'].isnull().any():
+                pchange = 100 * (data.iloc[-1]['Close'] - data.iloc[-2]['Close']) / data.iloc[-2]['Close']
+            else:
+                pchange = 0.0 # Default to 0 if not enough data or invalid
 
             # Update UI
             self.update_stats(data, pchange)
             self.update_charts(data, live_data, pchange)
 
-            self.status_bar.showMessage(f"Data updated for {self.ticker_names[self.current_ticker_idx]}")
+            self.statusBar().showMessage(f"Data updated for {self.ticker_names[self.current_ticker_idx]}")
         else:
-            self.status_bar.showMessage(f"Error fetching data for {self.ticker_names[self.current_ticker_idx]}")
+            self.statusBar().showMessage(f"Error fetching data for {self.ticker_names[self.current_ticker_idx]}")
 
     def update_stats(self, data, pchange):
         """Update statistics display"""
         # Update price and change
-        price = data.iloc[-1]['Close']
-        if pchange > 0:
-            self.price_label.setText(f"{price:.2f} ▲ ({pchange:.2f}%)")
-            self.price_label.setStyleSheet("color: green;")
+        if not data.empty and 'Close' in data.columns and not data['Close'].isnull().all():
+            price = data.iloc[-1]['Close']
+            if pchange > 0:
+                self.price_label.setText(f"{price:.2f} ▲ ({pchange:.2f}%)")
+                self.price_label.setStyleSheet("color: green;")
+            else:
+                self.price_label.setText(f"{price:.2f} ▼ ({pchange:.2f}%)")
+                self.price_label.setStyleSheet("color: red;")
         else:
-            self.price_label.setText(f"{price:.2f} ▼ ({pchange:.2f}%)")
-            self.price_label.setStyleSheet("color: red;")
+            self.price_label.setText("N/A")
+            self.price_label.setStyleSheet("color: black;")
+
 
         # Update other stats
-        self.prev_close_label.setText(f"Prev Close: {data.iloc[-2]['Close']:.2f}")
-        self.high_label.setText(f"High: {data.iloc[-1]['High']:.2f}")
-        self.open_label.setText(f"Open: {data.iloc[-1]['Open']:.2f}")
-        self.low_label.setText(f"Low: {data.iloc[-1]['Low']:.2f}")
+        if len(data) >= 2 and 'Close' in data.columns and 'High' in data.columns and 'Open' in data.columns and 'Low' in data.columns:
+            self.prev_close_label.setText(f"Prev Close: {data.iloc[-2]['Close']:.2f}")
+            self.high_label.setText(f"High: {data.iloc[-1]['High']:.2f}")
+            self.open_label.setText(f"Open: {data.iloc[-1]['Open']:.2f}")
+            self.low_label.setText(f"Low: {data.iloc[-1]['Low']:.2f}")
+        else:
+            self.prev_close_label.setText("Prev Close: N/A")
+            self.high_label.setText("High: N/A")
+            self.open_label.setText("Open: N/A")
+            self.low_label.setText("Low: N/A")
+
 
         self.last_updated_label.setText(f"Last Updated: {self.last_updated}")
 
@@ -736,10 +763,10 @@ class MainWindow(QMainWindow):
         """Update chart displays"""
         # Get portfolio holdings for current ticker
         holdings = self.data_module.get_portfolio_holdings()
-        current_ticker = self.tickers[self.current_ticker_idx]
+        current_ticker = self.tickers[self.current_ticker_idx] if self.current_ticker_idx < len(self.tickers) else None
 
         portfolio_holdings = None
-        if not holdings.empty and current_ticker in holdings['ticker'].values:
+        if current_ticker and not holdings.empty and current_ticker in holdings['ticker'].values:
             ticker_holding = holdings[holdings['ticker'] == current_ticker].iloc[0]
             portfolio_holdings = {
                 'quantity': ticker_holding['quantity'],
@@ -752,7 +779,7 @@ class MainWindow(QMainWindow):
         self.historical_web_view.setHtml(historical_html)
 
         # Update current chart
-        prev_close = data.iloc[-2]['Close']
+        prev_close = data.iloc[-2]['Close'] if len(data) >= 2 and 'Close' in data.columns else None
         current_fig = self.chart_module.create_current_figure(live_data, prev_close, portfolio_holdings)
         current_html = self.create_plotly_html(current_fig)
         self.current_web_view.setHtml(current_html)
@@ -802,7 +829,7 @@ class MainWindow(QMainWindow):
                 ticker = row['ticker']
                 data, _, _, status = self.data_module.get_ticker_data(ticker, 1)
 
-                if status == 1 and not data.empty:
+                if status == 1 and not data.empty and 'Close' in data.columns and not data['Close'].isnull().all():
                     current_price = data.iloc[-1]['Close']
                     holdings.at[i, 'current_price'] = current_price
 
@@ -810,7 +837,10 @@ class MainWindow(QMainWindow):
                     avg_price = row['avg_price']
                     quantity = row['quantity']
                     profit_loss = (current_price - avg_price) * quantity
-                    profit_loss_pct = (current_price - avg_price) / avg_price * 100
+                    
+                    # Corrected calculation for profit_loss_pct for individual holding
+                    cost_of_holding = avg_price * quantity
+                    profit_loss_pct = (profit_loss / cost_of_holding) * 100 if cost_of_holding > 0 else 0 
 
                     holdings.at[i, 'profit_loss'] = profit_loss
                     holdings.at[i, 'profit_loss_pct'] = profit_loss_pct
@@ -848,7 +878,7 @@ class MainWindow(QMainWindow):
             total_value = portfolio_value.sum()
             total_cost = (holdings['quantity'] * holdings['avg_price']).sum()
             profit_loss = total_value - total_cost
-            profit_loss_pct = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
+            percent_change = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
 
             self.portfolio_value_label.setText(f"₹{total_value:.2f}")
 
@@ -859,84 +889,51 @@ class MainWindow(QMainWindow):
                 self.pl_value_label.setText(f"₹{profit_loss:.2f} ({profit_loss_pct:.2f}%)")
                 self.pl_value_label.setStyleSheet("color: red;")
 
-            # Update portfolio chart
+            # Update portfolio allocation chart
             portfolio_fig = self.chart_module.create_portfolio_figure(holdings)
             portfolio_html = self.create_plotly_html(portfolio_fig)
             self.portfolio_web_view.setHtml(portfolio_html)
         else:
-            # No holdings
             self.portfolio_value_label.setText("₹0.00")
             self.pl_value_label.setText("₹0.00 (0.00%)")
-            self.pl_value_label.setStyleSheet("")
+            self.pl_value_label.setStyleSheet("color: black;")
+            # Clear portfolio chart if no holdings
+            self.portfolio_web_view.setHtml("")
 
-            # Empty chart
-            empty_fig = {"data": [], "layout": {"title": "No portfolio holdings"}}
-            portfolio_html = self.create_plotly_html(empty_fig)
-            self.portfolio_web_view.setHtml(empty_fig)
-
-    def load_transactions(self):
-        """Load transactions into table"""
-        transactions = self.data_module.get_transactions()
-
-        self.transactions_table.setRowCount(0)
-
-        if not transactions.empty:
-            self.transactions_table.setRowCount(len(transactions))
-
-            for i, row in transactions.iterrows():
-                self.transactions_table.setItem(i, 0, QTableWidgetItem(str(row['id'])))
-                self.transactions_table.setItem(i, 1, QTableWidgetItem(row['date']))
-
-                # Get ticker name
-                ticker = row['ticker']
-                ticker_name = ticker
-                # Ensure self.tickers is populated before checking
-                if hasattr(self, 'tickers') and ticker in self.tickers:
-                    idx = self.tickers.index(ticker)
-                    ticker_name = self.ticker_names[idx]
-
-                self.transactions_table.setItem(i, 2, QTableWidgetItem(f"{ticker} ({ticker_name})"))
-
-                type_item = QTableWidgetItem(row['type'])
-                if row['type'] == 'Buy':
-                    type_item.setForeground(QColor("green"))
-                else:
-                    type_item.setForeground(QColor("red"))
-                self.transactions_table.setItem(i, 3, type_item)
-
-                self.transactions_table.setItem(i, 4, QTableWidgetItem(f"{row['quantity']:.3f}"))
-                self.transactions_table.setItem(i, 5, QTableWidgetItem(f"{row['price']:.2f}"))
-
-                total = row['quantity'] * row['price']
-                self.transactions_table.setItem(i, 6, QTableWidgetItem(f"{total:.2f}"))
 
     def show_ticker_management(self):
-        """Show ticker management dialog"""
+        """Show dialog for managing tickers"""
         dialog = TickerManagementDialog(self, self.data_module)
         if dialog.exec():
+            # Reload tickers and refresh data if changes were made
             self.load_tickers()
-            self.fetch_data()
+            self.update_portfolio_tab() # Update portfolio tab after ticker changes
+            self.fetch_data() # Refresh data for the current ticker
+
+    def load_transactions(self):
+        """Load transactions from data module and display in table"""
+        transactions = self.data_module.get_transactions()
+        self.transactions_table.setRowCount(len(transactions))
+
+        for i, trans in enumerate(transactions):
+            self.transactions_table.setItem(i, 0, QTableWidgetItem(str(trans['id'])))
+            self.transactions_table.setItem(i, 1, QTableWidgetItem(trans['date']))
+            self.transactions_table.setItem(i, 2, QTableWidgetItem(trans['ticker']))
+            self.transactions_table.setItem(i, 3, QTableWidgetItem(trans['type']))
+            self.transactions_table.setItem(i, 4, QTableWidgetItem(f"{trans['quantity']:.3f}"))
+            self.transactions_table.setItem(i, 5, QTableWidgetItem(f"{trans['price']:.2f}"))
+            total_value = trans['quantity'] * trans['price']
+            self.transactions_table.setItem(i, 6, QTableWidgetItem(f"₹{total_value:.2f}"))
 
     def add_transaction(self):
-        """Add a new transaction"""
+        """Open dialog to add a new transaction"""
         dialog = TransactionDialog(self, self.tickers, self.ticker_names)
         if dialog.exec():
-            transaction = dialog.get_transaction()
-
-            if self.data_module.add_transaction(
-                transaction['date'],
-                transaction['ticker'],
-                transaction['type'],
-                transaction['quantity'],
-                transaction['price'],
-                transaction['notes']
-            ):
+            transaction_data = dialog.get_transaction()
+            if self.data_module.add_transaction(transaction_data):
                 self.load_transactions()
                 self.update_portfolio_tab()
-
-                # Update charts if current ticker matches transaction
-                if transaction['ticker'] == self.tickers[self.current_ticker_idx]:
-                    self.fetch_data()
+                self.fetch_data()
             else:
                 QMessageBox.warning(self, "Error", "Failed to add transaction")
 
@@ -946,33 +943,20 @@ class MainWindow(QMainWindow):
         if selected:
             row = selected[0].row()
             transaction_id = int(self.transactions_table.item(row, 0).text())
+            transaction_data = self.data_module.get_transaction_by_id(transaction_id)
 
-            # Get transaction data
-            transactions = self.data_module.get_transactions()
-            transaction = transactions[transactions['id'] == transaction_id].iloc[0].to_dict()
-
-            dialog = TransactionDialog(self, self.tickers, self.ticker_names, transaction)
-            if dialog.exec():
-                # Delete old transaction and add new one
-                # This is a simplification - in a real app, you'd update the existing record
-                # To properly update, you'd need a method in DataModule to update a transaction by ID
-                # For now, I'm assuming a delete and re-add for simplicity as per original code's comment
-                # However, the original code doesn't actually delete, just reloads.
-                # Let's add a proper delete method to data_module and use it.
-                if self.data_module.delete_transaction(transaction_id) and \
-                   self.data_module.add_transaction(
-                    dialog.get_transaction()['date'],
-                    dialog.get_transaction()['ticker'],
-                    dialog.get_transaction()['type'],
-                    dialog.get_transaction()['quantity'],
-                    dialog.get_transaction()['price'],
-                    dialog.get_transaction()['notes']
-                ):
-                    self.load_transactions()
-                    self.update_portfolio_tab()
-                    self.fetch_data()
-                else:
-                    QMessageBox.warning(self, "Error", "Failed to update transaction")
+            if transaction_data:
+                dialog = TransactionDialog(self, self.tickers, self.ticker_names, transaction_data)
+                if dialog.exec():
+                    updated_data = dialog.get_transaction()
+                    if self.data_module.update_transaction(transaction_id, updated_data):
+                        self.load_transactions()
+                        self.update_portfolio_tab()
+                        self.fetch_data()
+                    else:
+                        QMessageBox.warning(self, "Error", "Failed to update transaction")
+            else:
+                QMessageBox.warning(self, "Error", "Transaction not found")
         else:
             QMessageBox.information(self, "Select Transaction", "Please select a transaction to edit")
 
