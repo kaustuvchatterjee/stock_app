@@ -158,7 +158,7 @@ class DataModule:
             print(f"ERROR: Failed to remove ticker {ticker}: {e}")
             return False
 
-    def get_ticker_data(self, ticker: str, duration: int) -> Tuple[pd.DataFrame, pd.DataFrame, str, int]:
+    def get_ticker_data(self, ticker: str, duration: int=180) -> Tuple[pd.DataFrame, pd.DataFrame, str, int]:
         """
         Fetch historical and live data for a given ticker.
         
@@ -183,10 +183,11 @@ class DataModule:
             ticker_str = str(ticker)
             ticker_list = [ticker_str]
             # print(f"DEBUG: get_ticker_data: Inside, fetching for '{ticker_list[0]}' (type: {type(ticker_list[0])})")
+            
 
             end_date = datetime.now(pytz.utc)
             start_date = end_date - timedelta(days=duration)
-
+            # print(ticker_list, duration, start_date, end_date)
             # Fetch historical data
             hist_data_raw = yf.download(ticker_list, start=start_date, end=end_date, progress=False)
             # print(f"DEBUG: hist_data_raw after download (head):\n{hist_data_raw.head()}")
@@ -295,13 +296,18 @@ class DataModule:
         # RSI - Now correctly calling the instance method
         data['rsi'] = self._calculate_rsi(data)
 
-        # Simple Trade Signal (Example: Buy when MACD crosses Signal from below, Sell when from above)
-        data['trade_signal'] = 0
-        # Buy signal
-        data.loc[(data['MACD'] > data['Signal']) & (data['MACD'].shift(1) <= data['Signal'].shift(1)), 'trade_signal'] = 1
-        # Sell signal
-        data.loc[(data['MACD'] < data['Signal']) & (data['MACD'].shift(1) >= data['Signal'].shift(1)), 'trade_signal'] = -1
-
+        # Trade Signals
+        cf = 0.05
+        for i in range(len(data)):
+            if (data.iloc[i]['Close'] > data.iloc[i]['upper_bound']) | \
+                ((data.iloc[i]['Close'] > data.iloc[i]['upper_bound'] - cf * (data.iloc[i]['upper_bound']-data.iloc[i]['lower_bound'])) & \
+                    (data['rsi'].iloc[i]>75)):
+                data.at[data.index[i],'trade_signal'] = 1
+            elif (data.iloc[i]['Close'] < data.iloc[i]['lower_bound'] + \
+                (cf * (data.iloc[i]['upper_bound']-data.iloc[i]['lower_bound']))):
+                data.at[data.index[i],'trade_signal'] = -1
+            else:
+                data.at[data.index[i],'trade_signal'] = 0
         return data
 
     def _calculate_rsi(self, data: pd.DataFrame, window: int = 14) -> pd.Series:
@@ -317,7 +323,7 @@ class DataModule:
             pd.Series: A Series containing RSI values.
         """
         if 'Close' not in data.columns or data['Close'].isnull().all():
-            print("DEBUG: _calculate_rsi: 'Close' column not found or is all NaN.")
+            # print("DEBUG: _calculate_rsi: 'Close' column not found or is all NaN.")
             return pd.Series(dtype='float64')
 
         delta = data['Close'].diff()
@@ -488,7 +494,7 @@ class DataModule:
 
             for ticker in holdings_df['ticker'].unique():
                 # Pass the ticker as a list to get_ticker_data
-                data, _, _, status = self.get_ticker_data(ticker, 1) 
+                data, _, _, status = self.get_ticker_data(ticker) 
                 if status == 1 and not data.empty and 'Close' in data.columns and not data['Close'].isnull().all():
                     current_prices[ticker] = data.iloc[-1]['Close']
                 else:

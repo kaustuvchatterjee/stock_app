@@ -596,13 +596,14 @@ class MainWindow(QMainWindow):
         holdings_label = QLabel("Current Holdings")
         holdings_label.setAlignment(Qt.AlignCenter)
         font = QFont()
-        font.setPointSize(14)
+        font.setPointSize(10)
         holdings_label.setFont(font)
 
         self.holdings_table = QTableWidget()
         self.holdings_table.setColumnCount(6)
         self.holdings_table.setHorizontalHeaderLabels(["Ticker", "Name", "Quantity", "Avg Price", "Current Price", "Profit/Loss"])
         self.holdings_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.holdings_table.setFont(font)
 
         layout.addWidget(holdings_label)
         layout.addWidget(self.holdings_table)
@@ -611,7 +612,7 @@ class MainWindow(QMainWindow):
         chart_label = QLabel("Portfolio Allocation")
         chart_label.setAlignment(Qt.AlignCenter)
         font = QFont()
-        font.setPointSize(14)
+        font.setPointSize(11)
         chart_label.setFont(font)
 
         self.portfolio_web_view = QWebEngineView()
@@ -640,6 +641,9 @@ class MainWindow(QMainWindow):
         self.transactions_table.setHorizontalHeaderLabels(["ID", "Date", "Ticker", "Type", "Quantity", "Price", "Total"])
         self.transactions_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.transactions_table.setColumnHidden(0, True)  # Hide ID column
+        font = QFont()
+        font.setPointSize(10)
+        self.transactions_table.setFont(font)
 
         layout.addLayout(button_layout)
         layout.addWidget(self.transactions_table)
@@ -827,7 +831,7 @@ class MainWindow(QMainWindow):
 
             for i, row in holdings.iterrows():
                 ticker = row['ticker']
-                data, _, _, status = self.data_module.get_ticker_data(ticker, 1)
+                data, _, _, status = self.data_module.get_ticker_data(ticker)
 
                 if status == 1 and not data.empty and 'Close' in data.columns and not data['Close'].isnull().all():
                     current_price = data.iloc[-1]['Close']
@@ -919,7 +923,12 @@ class MainWindow(QMainWindow):
             self.transactions_table.setItem(i, 0, QTableWidgetItem(str(trans['id'])))
             self.transactions_table.setItem(i, 1, QTableWidgetItem(trans['date']))
             self.transactions_table.setItem(i, 2, QTableWidgetItem(trans['ticker']))
-            self.transactions_table.setItem(i, 3, QTableWidgetItem(trans['type']))
+            type_item = QTableWidgetItem(trans['type'])
+            if trans['type'] == 'Buy':
+                type_item.setForeground(QColor("green"))
+            else:
+                type_item.setForeground(QColor("red"))
+            self.transactions_table.setItem(i, 3, type_item)
             self.transactions_table.setItem(i, 4, QTableWidgetItem(f"{trans['quantity']:.3f}"))
             self.transactions_table.setItem(i, 5, QTableWidgetItem(f"{trans['price']:.2f}"))
             total_value = trans['quantity'] * trans['price']

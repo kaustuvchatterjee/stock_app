@@ -165,7 +165,7 @@ class ChartModule:
                      'short', 'long', 'MACD', 'Signal', 'MACD_Histo',
                      'sma', 'stddev', 'upper_bound', 'lower_bound', 'rsi']:
             if col in data_copy.columns:
-                data_copy[col] = data_copy[col].fillna(method='ffill').fillna(0) # Fill leading NaNs with 0
+                data_copy[col] = data_copy[col].fillna(0) # Fill leading NaNs with 0
 
         # Special handling for RSI: fill with 50 (neutral) if still NaN
         if 'rsi' in data_copy.columns:
@@ -537,7 +537,7 @@ class ChartModule:
         # Fill NaNs for all plotted columns in live_data_copy
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
             if col in live_data_copy.columns:
-                live_data_copy[col] = live_data_copy[col].fillna(method='ffill').fillna(0) # Fill leading NaNs with 0
+                live_data_copy[col] = live_data_copy[col].fillna(0) # Fill leading NaNs with 0
 
         # Drop rows where critical OHLCV data is NaN after filling
         live_data_copy.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'], inplace=True)
@@ -592,7 +592,7 @@ class ChartModule:
                 line_color='black',
                 line_width=0.5,
                 annotation_text=f"Prev Close: {prev_close:.2f}",
-                annotation_position="top left",
+                annotation_position="top right",
                 secondary_y=False
             )
 
@@ -640,11 +640,11 @@ class ChartModule:
             "title": "Current Day Trading",
             "showlegend": False,
             "xaxis": {"rangeslider": {"visible": False}, "showgrid": False, "title": "Time", "type": "date"}, # Explicitly set x-axis type
-            "yaxis": {"type": "linear", "range": live_price_y_range, "showgrid": False, "title": "Price"}, # Explicitly set type and range
+            "yaxis": {"showgrid": False, "title": "Price"},
             "yaxis2": {
                 "showticklabels": False,
                 "showgrid": False,
-                "range": [0, live_data_copy['Volume'].max() * 1.5 if 'Volume' in live_data_copy.columns and not live_data_copy['Volume'].isnull().all() else 1000], # Increased range for volume clarity
+                "range": [0, live_data_copy['Volume'].max() * 10 if 'Volume' in live_data_copy.columns and not live_data_copy['Volume'].isnull().all() else 1000], # Increased range for volume clarity
                 "title": "Volume"
             },
             "plot_bgcolor": "white",
