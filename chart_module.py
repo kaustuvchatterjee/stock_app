@@ -568,13 +568,18 @@ class ChartModule:
             if 'Close' in live_data_copy.columns and not live_data_copy['Close'].isnull().all():
                 fig.add_trace(go.Scatter(
                     x=live_data_copy['Datetime'].tolist(), y=live_data_copy['Close'].astype(float).tolist(), mode='lines',
-                    line=dict(color='blue'), name='Close Price', showlegend=False
+                    line=dict(color='blue'),
+                    name='Close Price',
+                    showlegend=False
                 ), secondary_y=False)
             else:
                 print("ERROR: Live 'Close' column also invalid for line plot.")
 
         # Bar chart for volume
-        if 'Volume' in live_data_copy.columns and not live_data_copy['Volume'].isnull().all():
+        print('DEBUG: Volume')
+        print(live_data_copy['Volume'])
+        # if 'Volume' in live_data_copy.columns and not live_data_copy['Volume'].isnull().all():
+        if 'Volume' in live_data_copy.columns and not live_data_copy['Volume'].sum()==0:
             fig.add_trace(go.Bar(
                 x=live_data_copy['Datetime'].tolist(),
                 y=live_data_copy['Volume'].astype(float).tolist(),
@@ -640,12 +645,12 @@ class ChartModule:
             "title": "Current Day Trading",
             "showlegend": False,
             "xaxis": {"rangeslider": {"visible": False}, "showgrid": False, "title": "Time", "type": "date"}, # Explicitly set x-axis type
-            "yaxis": {"showgrid": False, "title": "Price"},
+            "yaxis": {"showgrid": False,},
             "yaxis2": {
                 "showticklabels": False,
                 "showgrid": False,
                 "range": [0, live_data_copy['Volume'].max() * 10 if 'Volume' in live_data_copy.columns and not live_data_copy['Volume'].isnull().all() else 1000], # Increased range for volume clarity
-                "title": "Volume"
+                # "title": "Volume"
             },
             "plot_bgcolor": "white",
             "paper_bgcolor": "white",

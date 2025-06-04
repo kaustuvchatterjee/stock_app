@@ -183,7 +183,7 @@ class DataModule:
             ticker_str = str(ticker)
             ticker_list = [ticker_str]
             # print(f"DEBUG: get_ticker_data: Inside, fetching for '{ticker_list[0]}' (type: {type(ticker_list[0])})")
-            
+            t = yf.Ticker(ticker)
 
             end_date = datetime.now(pytz.utc)
             start_date = end_date - timedelta(days=duration)
@@ -225,8 +225,20 @@ class DataModule:
             else:
                 print(f"WARNING: Historical data is empty for {ticker_list[0]}, skipping indicator calculation.")
 
-            last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             # print(f"DEBUG: Successfully fetched data for {ticker_list[0]}. Historical rows: {len(hist_data)}, Live rows: {len(live_data)}")
+            if (t.info['quoteType'] == 'INDEX') | (t.info['quoteType'] == 'EQUITY'):
+                live_data = t.history(period = '1d', interval='1m')
+                live_data.reset_index(inplace=True)
+                last_updated = datetime.strftime(live_data.iloc[-1]['Datetime'],'%d %b %Y %H:%M')
+            elif t.info['quoteType'] == 'MUTUALFUND':
+                live_data = t.history(period = '1mo', interval='1d')
+                live_data.reset_index(inplace=True)
+                live_data.rename(columns={'Date': 'Datetime'}, inplace=True)
+                last_updated = datetime.strftime(live_data.iloc[-1]['Datetime'],'%d %b %Y %H:%M')
+            else:
+                last_updated = "N/A"
+
             status = 1
 
         except Exception as e:
