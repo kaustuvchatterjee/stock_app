@@ -576,8 +576,6 @@ class ChartModule:
                 print("ERROR: Live 'Close' column also invalid for line plot.")
 
         # Bar chart for volume
-        print('DEBUG: Volume')
-        print(live_data_copy['Volume'])
         # if 'Volume' in live_data_copy.columns and not live_data_copy['Volume'].isnull().all():
         if 'Volume' in live_data_copy.columns and not live_data_copy['Volume'].sum()==0:
             fig.add_trace(go.Bar(
